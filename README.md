@@ -12,4 +12,14 @@ LCD Display
 ==========
 An Arduino Leonardo with a 12864wz graphics display is used to display the statistics of the Multiplus. U8glibi(http://code.google.com/p/u8glib/) is used as the graphics library for the arduino.
 
+TODO
+====
+
+* Finalise mk2Daemon multithreading
+* Create HTTP service
+* Implement JSON output
+* Create systemd service
+* Create LCD interface to daemon
+* Create Munin plugin for Multiplus via deamon
+
  
