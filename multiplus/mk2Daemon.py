@@ -34,30 +34,21 @@ import sys
 import signal
 from usbid.device import device_list
 from mpStore import Mk2Store
-from threading import Thread, Lock, Event
+from threading import Thread, Event
+import Queue
+from SocketServer import ThreadingMixIn
+from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 
-class Mk2:
-    def __init__(self, stop_event):
-        self.device = Mk2Store()
+class Mk2(Thread):
+    def __init__(self, deviceQueue):
+        Thread.__init__(self)
         self.ser = serial.Serial()
         self.ser.baudrate = 2400
         self.ser.port = '/dev/'+self.getTtyDevice()
         self.ser.open()
         self.serOpen = True
-        self.stop_event = stop_event
-        
-        self.lock = Lock()
-        #self.mk2Run = True
-
-    #def stopDaemon(self):
-    #    self.mk2Run = False
-
-    def printLed(self, binStr):
-        names = ["temperature", "low_battery", "overload", "inverter", "float", "bulk", "absorption", "mains"]
-        for i in range(len(binStr)):
-            if binStr[i] == '1':
-                print names[i]
-    
+        self.deviceQueue = deviceQueue
+ 
     def getTtyDevice(self):
         vendorId = '0403'
         prodId = '6001'
@@ -109,8 +100,9 @@ class Mk2:
     def versionDecode(self,frame):
         version = frame[0] + frame[1]*256 + frame[2]*256*256 + frame[3]*256*256*256
         mode = frame[4]
-        print "Version: ",version
-        print "Mode: " , chr(mode)
+        device = self.deviceQueue.get()
+        device.setVersion(version)
+        self.deviceQueue.put(device)
     
         # DC Value
         send = self.frameCommand(['F', 0])
@@ -119,31 +111,36 @@ class Mk2:
     def ledDecode(self,frame):
         on = '{0:08b}'.format(frame[0])
         blink = '{0:08b}'.format(frame[1])
-        #print "LEDs On: "
-        #self.printLed(on)
-        #print "LEDs Blink: "
-        #self.printLed(blink)
+        leds = [0,0,0,0,0,0,0,0]
+        for i in range(8):
+            if on[i] == '1':
+                leds[i] = 1
+            elif blink[i] == '1':
+                leds[i] = 2
 
-        self.device.printState()
+        device = self.deviceQueue.get()
+        device.setLeds(leds)
+        device.printState()
+        self.deviceQueue.put(device)
         self.ser.close()
         self.serOpen = False
-        self.mk2Run = False
-        self.stop_event.wait(10)
-        #time.sleep(10)
-        print "\n-----------------------------------------------------------------------------"
+        time.sleep(10)
         
     def dcDecode(self,frame):
         batVoltage = round((frame[5] + frame[6]*256)/100.0, 2)
         usedCurrent = round((frame[7] + frame[8]*256 + frame[9]*256*256)/100.0, 2)
         chargingCurrent = round((frame[10] + frame[11]*256 + frame[12]*256*256)/100.0, 2)
+        # As I don not have the documentation for the Multiplus/MK2 comms, I am not quite sure
+        # what to do with the period. The answer I receive does not seem correct, but does seem
+        # correct for the input frequency.
         inverterFreq = round(100000.0/frame[13], 1)
         
         batCurrent = usedCurrent - chargingCurrent
-        self.lock.acquire()
-        self.device.setBatVoltage(batVoltage)
-        self.device.setBatCurrent(batCurrent)
-        self.device.setOutFreq(inverterFreq)
-        self.lock.release()
+        device = self.deviceQueue.get()
+        device.setBatVoltage(batVoltage)
+        device.setBatCurrent(batCurrent)
+        device.setOutFreq(inverterFreq)
+        self.deviceQueue.put(device)
     
         # L1
         send = self.frameCommand(['F', 1])
@@ -156,23 +153,26 @@ class Mk2:
         inCurrent = round((frame[7] + frame[8]*256)/100.0, 2)
         outVoltage =  round((frame[9] + frame[10]*256)/100.0, 1)
         outCurrent = round((frame[11] + frame[12]*256)/100.0, 2)
-        inFreq = round((10000.0/frame[13]), 1)
+        if (frame[13] == 0xFF):
+            inFreq = 0
+        else:
+            inFreq = round((10000.0/frame[13]), 1)
         
-        self.lock.acquire()
-        self.device.setInVoltage(inVoltage)
-        self.device.setInCurrent(inCurrent)
-        self.device.setOutVoltage(outVoltage)
-        self.device.setOutCurrent(outCurrent)
-        self.device.setInFreq(inFreq)
-        self.lock.release()
+        device = self.deviceQueue.get()
+        device.setInVoltage(inVoltage)
+        device.setInCurrent(inCurrent)
+        device.setOutVoltage(outVoltage)
+        device.setOutCurrent(outCurrent)
+        device.setInFreq(inFreq)
+        self.deviceQueue.put(device)
         # LED
         send = self.frameCommand(['L'])
         self.sendFrame(send)
     
     
-    def servMulti(self):
+    def run(self):
         dat = ""
-        while not self.stop_event.is_set():
+        while True:
             if self.serOpen == False:
                 self.ser.open()
                 self.serOpen = True
@@ -186,22 +186,52 @@ class Mk2:
                     frame.append(temp)
                 #print frame
                 self.deframe(frame)
+
+class RequestHandler(BaseHTTPRequestHandler):
+    def __init__(self, request, client_address, server):
+        BaseHTTPRequestHandler.__init__(self, request, client_address, server)
+        self.deviceQueue = server.deviceQueue
     
-    #def run(self):
+    def _writeheaders(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+
+    def do_HEAD(self):
+        self._writeheaders()
+
+    def do_GET(self):
+        self._writeheaders()
+        device = self.server.deviceQueue.get()
+        self.wfile.write(device.getJson())
+        self.server.deviceQueue.put(device)
     
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    """Handle requests in a separate thread."""
+
 if __name__ == "__main__":
-    mk2Stop = Event()
-    mk2 = Mk2(mk2Stop)
+    device = Mk2Store()
+    deviceQueue = Queue.Queue()
+    deviceQueue.put(device)
+    mainLoop = True
+
+    mk2 = Mk2(deviceQueue)
+    mk2.setDaemon(True)
+    mk2.start()
+
+    serveraddr = ('', 9005)
+    srvr = ThreadingHTTPServer(serveraddr, RequestHandler)
+    srvr.deviceQueue = deviceQueue
+    srvrDaemon = Thread(target=srvr.serve_forever)
+    srvrDaemon.setDaemon(True)
+    srvrDaemon.start()
+
+
     try:
-        print "1"
-        usbDaemon = Thread(target = mk2.servMulti)
-        print "2"
-        #usbDaemon.start()
-        print "3"
-        #usbDaemon.join()
-        print "4"
+        while mainLoop:
+            time.sleep(1)
     except KeyboardInterrupt:
-        print "Stopping Daemon"
-        mk2Stop.set()
-    #mk.servMulti()
+        print "\nStopping Daemon\n"
+        mainLoop = False
+
     

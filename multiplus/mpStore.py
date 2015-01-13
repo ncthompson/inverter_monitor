@@ -25,6 +25,7 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 '''
+import json
 
 class Mk2Store:
     
@@ -43,10 +44,12 @@ class Mk2Store:
         self.outFreq = 0
 
         # Save LED state
-        self.temperature_state = 0
-        self.power_out_state = 0
-        self.power_in_state = 0
-        self.battery_state = 0
+        # 0 off - 1 on - 2 blink
+        self.ledNames = ["temperature", "low_battery", "overload", "inverter", "float", "bulk", "absorption", "mains"]
+        self.leds = [0,0,0,0,0,0,0,0]
+
+    def setVersion(self, version):
+        self.version = version
 
     def setBatVoltage(self, voltage):
         self.batVoltage = voltage
@@ -83,15 +86,50 @@ class Mk2Store:
 
     def setBatteryState(self, state):
         self.battery_state = state
+   
+    def setLeds(self, leds):
+        self.leds = leds
+
+    def printLed(self):
+        print "LEDs On:",
+        for i in range(len(self.leds)):
+            if self.leds[i] == 1:
+                print self.ledNames[i],
+        print
+        print "LEDs Blink:",
+        for i in range(len(self.leds)):
+            if self.leds[i] == 2:
+                print self.ledNames[i],
+        print
     
     def printState(self):
+        print "========================================"
+        print "                Multiplus"
+        print "========================================"
         print "Battery Voltage: ", self.batVoltage
         print "Battery Current: ", self.batCurrent
 
+        print
         print "In Voltage: ", self.inVoltage
         print "In Current: ",  self.inCurrent
         print "In Frequency: ", self.inFreq
 
+        print
         print "Out Voltage: ", self.outVoltage
         print "Out Current: ", self.outCurrent
         print "Out Frequency: ", self.outFreq
+        self.printLed()
+        print
+        print "Version: ", self.version
+        print "========================================"
+        print
+    
+    def getJson(self):
+        data = [{'batVoltage':self.batVoltage, 'batCurrent':self.batCurrent, 
+                'inVoltage':self.inVoltage, 'inCurrent':self.inCurrent,
+                'inFreq':self.inFreq, 'outVoltage':self.outVoltage,
+                'outCurrent':self.outCurrent, 'outFreq':self.outFreq,
+                'leds':self.leds}]
+
+        jsonString = json.dumps(data)
+        return jsonString

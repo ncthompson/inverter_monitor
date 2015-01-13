@@ -15,9 +15,9 @@ An Arduino Leonardo with a 12864wz graphics display is used to display the stati
 TODO
 ====
 
-* Finalise mk2Daemon multithreading
-* Create HTTP service
-* Implement JSON output
+* Change Mk2 daemon algorithm to state machine
+* Improve mk2Daemon multithreading
+* Setup Daemon Logging
 * Create systemd service
 * Create LCD interface to daemon
 * Create Munin plugin for Multiplus via deamon
