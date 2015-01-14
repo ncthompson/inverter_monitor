@@ -19,7 +19,4 @@ TODO
 * Improve mk2Daemon multithreading
 * Setup Daemon Logging
 * Create systemd service
-* Create LCD interface to daemon
 * Create Munin plugin for Multiplus via deamon
-
- 
