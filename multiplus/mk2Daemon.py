@@ -40,6 +40,7 @@ from SocketServer import ThreadingMixIn
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 
 class Mk2(Thread):
+    # Initialize the serial device and set device queue.
     def __init__(self, deviceQueue):
         Thread.__init__(self)
         self.ser = serial.Serial()
@@ -48,7 +49,10 @@ class Mk2(Thread):
         self.ser.open()
         self.serOpen = True
         self.deviceQueue = deviceQueue
- 
+
+    # Function identifies the ttyUSB device that is associated with the FTDI device,
+    # that the Mk2 uses. This only looks for a single device, so if multiple devices 
+    # have the same ID, this will probably break something. 
     def getTtyDevice(self):
         vendorId = '0403'
         prodId = '6001'
@@ -56,6 +60,7 @@ class Mk2(Thread):
            if dev.idVendor == vendorId and dev.idProduct == prodId:
             return dev.tty
     
+    # Transforms the command bytes into a valid frame to send to the multiplus.
     def frameCommand(self,command):
         frame = []
         length = len(command) + 1
@@ -72,10 +77,14 @@ class Mk2(Thread):
         frame.append(cs)
         return frame
     
+    # Send each byte in the built up frame.
     def sendFrame(self,frame):
         for i in frame:
             self.ser.write(chr(i)) 
     
+    # Checks then checksum of the frame to determine if it is a valid frame. 
+    # If it is a valid frame, it will try to determine content of the frame
+    # for further decoding.
     def deframe(self,frame):
         cr = 0
         length = frame[0]
@@ -92,11 +101,15 @@ class Mk2(Thread):
         elif frame[1] == 0x20:    #VE.Bus info
             if frame[6] == 0x0C:  #VE.Bus DC Info
                 self.dcDecode(frame[2:])  
-            elif frame[6] == 0x08:
+            elif frame[6] == 0x08:#VE.Bus AC Info
                 self.acDecode(frame[2:])  
             else:
                 print frame
         
+    # Decodes the MK2 version frame that is sent automatically every 1 second or so.
+    # As I do not have the ICD for the Multiplus, I can only assume this is normal.
+    # I use the version to sync on a frame and then start a sequence to request
+    # DC, AC and LED status.
     def versionDecode(self,frame):
         version = frame[0] + frame[1]*256 + frame[2]*256*256 + frame[3]*256*256*256
         mode = frame[4]
@@ -104,10 +117,11 @@ class Mk2(Thread):
         device.setVersion(version)
         self.deviceQueue.put(device)
     
-        # DC Value
+        # Send the DC status request.
         send = self.frameCommand(['F', 0])
         self.sendFrame(send)
     
+    # Decodes the led status of the led panel.
     def ledDecode(self,frame):
         on = '{0:08b}'.format(frame[0])
         blink = '{0:08b}'.format(frame[1])
@@ -126,6 +140,7 @@ class Mk2(Thread):
         self.serOpen = False
         time.sleep(10)
         
+    # Decode the DC frame information of theMultiplus.
     def dcDecode(self,frame):
         batVoltage = round((frame[5] + frame[6]*256)/100.0, 2)
         usedCurrent = round((frame[7] + frame[8]*256 + frame[9]*256*256)/100.0, 2)
@@ -135,6 +150,7 @@ class Mk2(Thread):
         # correct for the input frequency.
         inverterFreq = round(100000.0/frame[13], 1)
         
+        # Retrieve device on queue and updates DC status.
         batCurrent = usedCurrent - chargingCurrent
         device = self.deviceQueue.get()
         device.setBatVoltage(batVoltage)
@@ -142,22 +158,28 @@ class Mk2(Thread):
         device.setOutFreq(inverterFreq)
         self.deviceQueue.put(device)
     
-        # L1
+        # Send the L1(ac status) status request.
         send = self.frameCommand(['F', 1])
         self.sendFrame(send)
     
+    # Decode the DC frame information of theMultiplus.
     def acDecode(self,frame):
-        #print "BF Factor: ", (frame[0])/128.0-1
-        #print "Inv Factor: ", (frame[1])/128.0-1
+        # The elorn energy example shows this as the power factor, but I am not sure what
+        # the conversion factor is, so I can not use it. My devices shows these two values as 1.
+        #inFactor = frame[0])
+        #outFactor =frame[1])
         inVoltage = round((frame[5] + frame[6]*256)/100.0, 1)
         inCurrent = round((frame[7] + frame[8]*256)/100.0, 2)
         outVoltage =  round((frame[9] + frame[10]*256)/100.0, 1)
         outCurrent = round((frame[11] + frame[12]*256)/100.0, 2)
+        
+        # When the AC power is lost, the  period is 0xFF as it loses lock a guess.
         if (frame[13] == 0xFF):
             inFreq = 0
         else:
             inFreq = round((10000.0/frame[13]), 1)
         
+        # Retrieve device on queue and updates AC status.
         device = self.deviceQueue.get()
         device.setInVoltage(inVoltage)
         device.setInCurrent(inCurrent)
@@ -165,11 +187,12 @@ class Mk2(Thread):
         device.setOutCurrent(outCurrent)
         device.setInFreq(inFreq)
         self.deviceQueue.put(device)
-        # LED
+        
+        # Send the LED status request.
         send = self.frameCommand(['L'])
         self.sendFrame(send)
     
-    
+    # The Mk2 thread monitors the serial line for a possible frame.
     def run(self):
         dat = ""
         while True:
@@ -179,14 +202,16 @@ class Mk2(Thread):
             if dat != "":
                 length = ord(dat)
             dat = self.ser.read()
+            # All of the frames I receive is either 0xFF or 0x20.
+            # It is possible the device has other frames that I am not aware of.
             if ord(dat) == 0xff or ord(dat) == 0x20:
                 frame = [length, ord(dat)]
                 for i in range(length):
                     temp = ord(self.ser.read())
                     frame.append(temp)
-                #print frame
                 self.deframe(frame)
 
+# Handles the HTTP requests.
 class RequestHandler(BaseHTTPRequestHandler):
     def __init__(self, request, client_address, server):
         BaseHTTPRequestHandler.__init__(self, request, client_address, server)
@@ -202,10 +227,12 @@ class RequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self._writeheaders()
+        # Retrieve device on queue and request current status.
         device = self.server.deviceQueue.get()
         self.wfile.write(device.getJson())
         self.server.deviceQueue.put(device)
     
+# Allows for a multi threaded HTTP server.
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     """Handle requests in a separate thread."""
 
@@ -226,7 +253,7 @@ if __name__ == "__main__":
     srvrDaemon.setDaemon(True)
     srvrDaemon.start()
 
-
+    # Catch the CTL-C to close the program gracefully.
     try:
         while mainLoop:
             time.sleep(1)

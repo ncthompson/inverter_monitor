@@ -27,6 +27,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 '''
 import json
 
+# The class is used to store the current values of the device and can be printed or returned 
+# as a JSON string.
 class Mk2Store:
     
     def __init__(self):
