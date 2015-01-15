@@ -1,0 +1,8 @@
+[Unit]
+Description=MK2 Multiplus Monitoring Daemon
+
+[Service]
+ExecStart=/usr/bin/python /opt/inverter_monitor/multiplus/mk2Daemon.py
+Restart=always
+StandardOutput=syslog
+StandardError=syslog

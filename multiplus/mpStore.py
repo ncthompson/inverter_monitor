@@ -93,38 +93,37 @@ class Mk2Store:
         self.leds = leds
 
     def printLed(self):
-        print "LEDs On:",
+        printStr = "LEDs On: "
         for i in range(len(self.leds)):
             if self.leds[i] == 1:
-                print self.ledNames[i],
-        print
-        print "LEDs Blink:",
+                printStr +=  str(self.ledNames[i]) + " "
+        printStr += "\n" 
+        printStr +=  "LEDs Blink:"
         for i in range(len(self.leds)):
             if self.leds[i] == 2:
-                print self.ledNames[i],
-        print
+                printStr +=  str(self.ledNames[i]) + " " 
+        printStr += "\n"
+        return printStr
     
     def printState(self):
-        print "========================================"
-        print "                Multiplus"
-        print "========================================"
-        print "Battery Voltage: ", self.batVoltage
-        print "Battery Current: ", self.batCurrent
+        printStr = "========================================\n"
+        printStr += "                Multiplus\n"
+        printStr += "========================================\n"
+        printStr += "Battery Voltage: "+str(self.batVoltage) + "\n"
+        printStr += "Battery Current: "+str(self.batCurrent)+ "\n\n"
 
-        print
-        print "In Voltage: ", self.inVoltage
-        print "In Current: ",  self.inCurrent
-        print "In Frequency: ", self.inFreq
+        printStr +=  "In Voltage: "+str(self.inVoltage)+ "\n"
+        printStr +=  "In Current: "+str(self.inCurrent)+ "\n"
+        printStr +=  "In Frequency: "+str(self.inFreq)+ "\n\n"
 
-        print
-        print "Out Voltage: ", self.outVoltage
-        print "Out Current: ", self.outCurrent
-        print "Out Frequency: ", self.outFreq
-        self.printLed()
-        print
-        print "Version: ", self.version
-        print "========================================"
-        print
+        printStr +=  "Out Voltage: "+str(self.outVoltage)+ "\n"
+        printStr +=  "Out Current: "+str(self.outCurrent)+ "\n"
+        printStr +=  "Out Frequency: "+str(self.outFreq)+ "\n"
+        printStr += self.printLed() + "\n"
+        
+        printStr +=  "Version: "+str(self.version)+ "\n"
+        printStr +=  "========================================\n"
+        return printStr
     
     def getJson(self):
         data = [{'batVoltage':self.batVoltage, 'batCurrent':self.batCurrent, 

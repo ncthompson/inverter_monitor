@@ -32,27 +32,33 @@ import serial
 import time
 import sys
 import signal
+import Queue
+import logging
 from usbid.device import device_list
 from mpStore import Mk2Store
 from threading import Thread, Event
-import Queue
 from SocketServer import ThreadingMixIn
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 
 class Mk2(Thread):
-    # Initialize the serial device and set device queue.
+    """ Initialize the serial device and set device queue."""
     def __init__(self, deviceQueue):
+        logging.basicConfig(level=logging.INFO)
         Thread.__init__(self)
         self.ser = serial.Serial()
         self.ser.baudrate = 2400
         self.ser.port = '/dev/'+self.getTtyDevice()
-        self.ser.open()
+        try:
+            self.ser.open()
+            logging.info("Connected to serial device" + self.ser.port)
+        except SerialException:
+            logging.error("Device could not be configured: " + self.ser.port)
         self.serOpen = True
         self.deviceQueue = deviceQueue
 
-    # Function identifies the ttyUSB device that is associated with the FTDI device,
-    # that the Mk2 uses. This only looks for a single device, so if multiple devices 
-    # have the same ID, this will probably break something. 
+    """ Function identifies the ttyUSB device that is associated with the FTDI device,
+        that the Mk2 uses. This only looks for a single device, so if multiple devices 
+        have the same ID, this will probably break something.""" 
     def getTtyDevice(self):
         vendorId = '0403'
         prodId = '6001'
@@ -60,7 +66,7 @@ class Mk2(Thread):
            if dev.idVendor == vendorId and dev.idProduct == prodId:
             return dev.tty
     
-    # Transforms the command bytes into a valid frame to send to the multiplus.
+    """ Transforms the command bytes into a valid frame to send to the Multiplus."""
     def frameCommand(self,command):
         frame = []
         length = len(command) + 1
@@ -77,14 +83,14 @@ class Mk2(Thread):
         frame.append(cs)
         return frame
     
-    # Send each byte in the built up frame.
+    """ Send each byte in the built up frame."""
     def sendFrame(self,frame):
         for i in frame:
             self.ser.write(chr(i)) 
     
-    # Checks then checksum of the frame to determine if it is a valid frame. 
-    # If it is a valid frame, it will try to determine content of the frame
-    # for further decoding.
+    """ Checks then checksum of the frame to determine if it is a valid frame. 
+        If it is a valid frame, it will try to determine content of the frame
+        for further decoding."""
     def deframe(self,frame):
         cr = 0
         length = frame[0]
@@ -106,10 +112,10 @@ class Mk2(Thread):
             else:
                 print frame
         
-    # Decodes the MK2 version frame that is sent automatically every 1 second or so.
-    # As I do not have the ICD for the Multiplus, I can only assume this is normal.
-    # I use the version to sync on a frame and then start a sequence to request
-    # DC, AC and LED status.
+    """ Decodes the MK2 version frame that is sent automatically every 1 second or so.
+        As I do not have the ICD for the Multiplus, I can only assume this is normal.
+        I use the version to sync on a frame and then start a sequence to request
+        DC, AC and LED status."""
     def versionDecode(self,frame):
         version = frame[0] + frame[1]*256 + frame[2]*256*256 + frame[3]*256*256*256
         mode = frame[4]
@@ -121,7 +127,7 @@ class Mk2(Thread):
         send = self.frameCommand(['F', 0])
         self.sendFrame(send)
     
-    # Decodes the led status of the led panel.
+    """ Decodes the led status of the led panel."""
     def ledDecode(self,frame):
         on = '{0:08b}'.format(frame[0])
         blink = '{0:08b}'.format(frame[1])
@@ -134,13 +140,16 @@ class Mk2(Thread):
 
         device = self.deviceQueue.get()
         device.setLeds(leds)
-        device.printState()
+        logging.debug(device.printState())
+        
         self.deviceQueue.put(device)
+        
+        # Close serial device and wait 10 seconds
         self.ser.close()
         self.serOpen = False
         time.sleep(10)
         
-    # Decode the DC frame information of theMultiplus.
+    """ Decode the DC frame information of theMultiplus."""
     def dcDecode(self,frame):
         batVoltage = round((frame[5] + frame[6]*256)/100.0, 2)
         usedCurrent = round((frame[7] + frame[8]*256 + frame[9]*256*256)/100.0, 2)
@@ -162,7 +171,7 @@ class Mk2(Thread):
         send = self.frameCommand(['F', 1])
         self.sendFrame(send)
     
-    # Decode the DC frame information of theMultiplus.
+    """ Decode the DC frame information of theMultiplus."""
     def acDecode(self,frame):
         # The elorn energy example shows this as the power factor, but I am not sure what
         # the conversion factor is, so I can not use it. My devices shows these two values as 1.
@@ -192,13 +201,17 @@ class Mk2(Thread):
         send = self.frameCommand(['L'])
         self.sendFrame(send)
     
-    # The Mk2 thread monitors the serial line for a possible frame.
+    """ The Mk2 thread monitors the serial line for a possible frame."""
     def run(self):
         dat = ""
         while True:
             if self.serOpen == False:
-                self.ser.open()
-                self.serOpen = True
+                try:
+                    self.ser.open()
+                    self.serOpen = True
+                    logging.debug("Reopen device.")
+                except SerialException:
+                    logging.error("Device could not be opened: " + self.ser.port)
             if dat != "":
                 length = ord(dat)
             dat = self.ser.read()
@@ -210,8 +223,9 @@ class Mk2(Thread):
                     temp = ord(self.ser.read())
                     frame.append(temp)
                 self.deframe(frame)
-
-# Handles the HTTP requests.
+                
+            
+""" Handles the HTTP requests."""
 class RequestHandler(BaseHTTPRequestHandler):
     def __init__(self, request, client_address, server):
         BaseHTTPRequestHandler.__init__(self, request, client_address, server)
@@ -232,11 +246,12 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(device.getJson())
         self.server.deviceQueue.put(device)
     
-# Allows for a multi threaded HTTP server.
+""" Allows for a multi threaded HTTP server. """
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     """Handle requests in a separate thread."""
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     device = Mk2Store()
     deviceQueue = Queue.Queue()
     deviceQueue.put(device)
@@ -245,6 +260,7 @@ if __name__ == "__main__":
     mk2 = Mk2(deviceQueue)
     mk2.setDaemon(True)
     mk2.start()
+    logging.info("Starting MK2 Daemon")
 
     serveraddr = ('', 9005)
     srvr = ThreadingHTTPServer(serveraddr, RequestHandler)
@@ -252,13 +268,14 @@ if __name__ == "__main__":
     srvrDaemon = Thread(target=srvr.serve_forever)
     srvrDaemon.setDaemon(True)
     srvrDaemon.start()
+    logging.info("Starting HTTP Daemon")
 
     # Catch the CTL-C to close the program gracefully.
     try:
         while mainLoop:
             time.sleep(1)
     except KeyboardInterrupt:
-        print "\nStopping Daemon\n"
+        logging.info("Stopping MK2 and HTTP Daemon")
         mainLoop = False
 
     

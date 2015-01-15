@@ -31,8 +31,15 @@ import serial
 import time
 import urllib
 import json
+import logging
 
-ser = serial.Serial("/dev/ttyACM0", 9600)
+logging.basicConfig(level=logging.INFO)
+try:
+    ser = serial.Serial("/dev/ttyACM0", 9600)
+    logging.info("Connected to serial device")
+except serial.SerialException:
+    logging.error("Device could not be configured")
+    
 url = "http://192.168.1.25:9005/"
 
 
@@ -61,8 +68,12 @@ def formatString(value, length, fLen):
     return string    
 
 def getMultiplusInfo():
-    response = urllib.urlopen(url)
-    responseString = response.read()
+    try:
+        response = urllib.urlopen(url)
+        responseString = response.read()
+    except Exception:
+        logging.error("URL Error to request JSON")
+        return ""
     device = json.loads(responseString)
 
     leds = device[0]['leds']
@@ -113,5 +124,4 @@ while True:
     sendString = buildFrame()    
     for i in range(len(sendString)):
         ser.write(sendString[i])
-        #print i
     time.sleep(10)

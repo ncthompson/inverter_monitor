@@ -1,0 +1,10 @@
+[Unit]
+Description=MK2 Multiplus LCD Driver Daemon
+After=mk2service.service
+Requires=mk2service.service
+
+[Service]
+ExecStart=/usr/bin/python /opt/inverter_monitor/lcdDisplay/lcdDriver.py
+Restart=always
+StandardOutput=syslog
+StandardError=syslog
