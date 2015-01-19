@@ -243,9 +243,11 @@ class RequestHandler(BaseHTTPRequestHandler):
         self._writeheaders()
         # Retrieve device on queue and request current status.
         device = self.server.deviceQueue.get()
-        self.wfile.write(device.getJson())
-        self.server.deviceQueue.put(device)
-    
+        try:
+          self.wfile.write(device.getJson())
+        finally:
+          self.server.deviceQueue.put(device)
+
 """ Allows for a multi threaded HTTP server. """
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     """Handle requests in a separate thread."""
