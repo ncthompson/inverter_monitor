@@ -1,0 +1,5 @@
+Dependencies pidora 20:
+
+sudo yum install pyserial
+sudo yum install python-pip
+sudo pip install usbid
