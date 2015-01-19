@@ -34,6 +34,7 @@ import sys
 import signal
 import Queue
 import logging
+import argparse
 from usbid.device import device_list
 from mpStore import Mk2Store
 from threading import Thread, Event
@@ -42,12 +43,15 @@ from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 
 class Mk2(Thread):
     """ Initialize the serial device and set device queue."""
-    def __init__(self, deviceQueue):
+    def __init__(self, deviceQueue, deviceName):
         logging.basicConfig(level=logging.INFO)
         Thread.__init__(self)
         self.ser = serial.Serial()
         self.ser.baudrate = 2400
-        self.ser.port = '/dev/'+self.getTtyDevice()
+        if deviceName != '':
+            self.ser.port = deviceName
+        else:
+            self.ser.port = '/dev/'+self.getTtyDevice()
         try:
             self.ser.open()
             logging.info("Connected to serial device" + self.ser.port)
@@ -254,12 +258,21 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dev', help="The tty device of the Victron MK2. (Defaults to the first USB MK2)")
+    args = parser.parse_args()
+
+
     device = Mk2Store()
     deviceQueue = Queue.Queue()
     deviceQueue.put(device)
     mainLoop = True
 
-    mk2 = Mk2(deviceQueue)
+    if args.dev:
+        mk2 = Mk2(deviceQueue, args.dev)
+    else:
+        mk2 = Mk2(deviceQueue, '')
     mk2.setDaemon(True)
     mk2.start()
     logging.info("Starting MK2 Daemon")
