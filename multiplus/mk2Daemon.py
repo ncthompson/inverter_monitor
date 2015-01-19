@@ -130,8 +130,18 @@ class Mk2(Thread):
         # Send the DC status request.
         send = self.frameCommand(['F', 0])
         self.sendFrame(send)
-    
-    """ Decodes the led status of the led panel."""
+
+    """ Decodes the led status of the led panel.
+    Fields mean:
+    temperature
+    low_battery
+    overload
+    inverter
+    float
+    bulk
+    absorption
+    mains
+    """
     def ledDecode(self,frame):
         on = '{0:08b}'.format(frame[0])
         blink = '{0:08b}'.format(frame[1])
