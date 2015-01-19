@@ -10,21 +10,21 @@ Redistribution and use in source and binary forms, with or without modification,
     this list of conditions and the following disclaimer.
 
 2) Redistributions in binary form must reproduce the above copyright notice,
-    this list of conditions and the following disclaimer in the documentation 
+    this list of conditions and the following disclaimer in the documentation
     and/or other materials provided with the distribution.
 
-3) Neither the name of the ORGANIZATION nor the names of its contributors may 
-    be used to endorse or promote products derived from this software without 
+3) Neither the name of the ORGANIZATION nor the names of its contributors may
+    be used to endorse or promote products derived from this software without
     specific prior written permission.
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY 
-EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES 
-OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT 
-SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) 
-HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, 
-OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT
+SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 '''
 
@@ -61,15 +61,15 @@ class Mk2(Thread):
         self.deviceQueue = deviceQueue
 
     """ Function identifies the ttyUSB device that is associated with the FTDI device,
-        that the Mk2 uses. This only looks for a single device, so if multiple devices 
-        have the same ID, this will probably break something.""" 
+        that the Mk2 uses. This only looks for a single device, so if multiple devices
+        have the same ID, this will probably break something."""
     def getTtyDevice(self):
         vendorId = '0403'
         prodId = '6001'
         for dev in device_list():
            if dev.idVendor == vendorId and dev.idProduct == prodId:
             return dev.tty
-    
+
     """ Transforms the command bytes into a valid frame to send to the Multiplus."""
     def frameCommand(self,command):
         frame = []
@@ -86,13 +86,13 @@ class Mk2(Thread):
             cs = (cs - entry)%256
         frame.append(cs)
         return frame
-    
+
     """ Send each byte in the built up frame."""
     def sendFrame(self,frame):
         for i in frame:
-            self.ser.write(chr(i)) 
-    
-    """ Checks then checksum of the frame to determine if it is a valid frame. 
+            self.ser.write(chr(i))
+
+    """ Checks then checksum of the frame to determine if it is a valid frame.
         If it is a valid frame, it will try to determine content of the frame
         for further decoding."""
     def deframe(self,frame):
@@ -103,19 +103,19 @@ class Mk2(Thread):
         if cr != 0:
             return "Checksum failed"
         if frame[1] == 0xFF:      #MK2 frame
-    
+
             if frame[2] == ord('V'):        #MK Version
                 self.versionDecode(frame[3:])
             elif frame[2] == ord('L'):      #LED status
                 self.ledDecode(frame[3:])
         elif frame[1] == 0x20:    #VE.Bus info
             if frame[6] == 0x0C:  #VE.Bus DC Info
-                self.dcDecode(frame[2:])  
+                self.dcDecode(frame[2:])
             elif frame[6] == 0x08:#VE.Bus AC Info
-                self.acDecode(frame[2:])  
+                self.acDecode(frame[2:])
             else:
                 print frame
-        
+
     """ Decodes the MK2 version frame that is sent automatically every 1 second or so.
         As I do not have the ICD for the Multiplus, I can only assume this is normal.
         I use the version to sync on a frame and then start a sequence to request
@@ -126,7 +126,7 @@ class Mk2(Thread):
         device = self.deviceQueue.get()
         device.setVersion(version)
         self.deviceQueue.put(device)
-    
+
         # Send the DC status request.
         send = self.frameCommand(['F', 0])
         self.sendFrame(send)
@@ -155,14 +155,14 @@ class Mk2(Thread):
         device = self.deviceQueue.get()
         device.setLeds(leds)
         logging.debug(device.printState())
-        
+
         self.deviceQueue.put(device)
-        
+
         # Close serial device and wait 10 seconds
         self.ser.close()
         self.serOpen = False
         time.sleep(10)
-        
+
     """ Decode the DC frame information of theMultiplus."""
     def dcDecode(self,frame):
         batVoltage = round((frame[5] + frame[6]*256)/100.0, 2)
@@ -172,7 +172,7 @@ class Mk2(Thread):
         # what to do with the period. The answer I receive does not seem correct, but does seem
         # correct for the input frequency.
         inverterFreq = round(100000.0/frame[13], 1)
-        
+
         # Retrieve device on queue and updates DC status.
         batCurrent = usedCurrent - chargingCurrent
         device = self.deviceQueue.get()
@@ -180,11 +180,11 @@ class Mk2(Thread):
         device.setBatCurrent(batCurrent)
         device.setOutFreq(inverterFreq)
         self.deviceQueue.put(device)
-    
+
         # Send the L1(ac status) status request.
         send = self.frameCommand(['F', 1])
         self.sendFrame(send)
-    
+
     """ Decode the DC frame information of theMultiplus."""
     def acDecode(self,frame):
         # The elorn energy example shows this as the power factor, but I am not sure what
@@ -195,13 +195,13 @@ class Mk2(Thread):
         inCurrent = round((frame[7] + frame[8]*256)/100.0, 2)
         outVoltage =  round((frame[9] + frame[10]*256)/100.0, 1)
         outCurrent = round((frame[11] + frame[12]*256)/100.0, 2)
-        
+
         # When the AC power is lost, the  period is 0xFF as it loses lock a guess.
         if (frame[13] == 0xFF):
             inFreq = 0
         else:
             inFreq = round((10000.0/frame[13]), 1)
-        
+
         # Retrieve device on queue and updates AC status.
         device = self.deviceQueue.get()
         device.setInVoltage(inVoltage)
@@ -210,11 +210,11 @@ class Mk2(Thread):
         device.setOutCurrent(outCurrent)
         device.setInFreq(inFreq)
         self.deviceQueue.put(device)
-        
+
         # Send the LED status request.
         send = self.frameCommand(['L'])
         self.sendFrame(send)
-    
+
     """ The Mk2 thread monitors the serial line for a possible frame."""
     def run(self):
         dat = ""
@@ -237,14 +237,14 @@ class Mk2(Thread):
                     temp = ord(self.ser.read())
                     frame.append(temp)
                 self.deframe(frame)
-                
-            
+
+
 """ Handles the HTTP requests."""
 class RequestHandler(BaseHTTPRequestHandler):
     def __init__(self, request, client_address, server):
         BaseHTTPRequestHandler.__init__(self, request, client_address, server)
         self.deviceQueue = server.deviceQueue
-    
+
     def _writeheaders(self):
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
@@ -303,4 +303,4 @@ if __name__ == "__main__":
         logging.info("Stopping MK2 and HTTP Daemon")
         mainLoop = False
 
-    
+
