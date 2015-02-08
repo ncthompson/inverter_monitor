@@ -126,11 +126,11 @@ class Mk2Store:
         return printStr
     
     def getJson(self):
-        data = [{'batVoltage':self.batVoltage, 'batCurrent':self.batCurrent, 
+        data = {'batVoltage':self.batVoltage, 'batCurrent':self.batCurrent,
                 'inVoltage':self.inVoltage, 'inCurrent':self.inCurrent,
                 'inFreq':self.inFreq, 'outVoltage':self.outVoltage,
                 'outCurrent':self.outCurrent, 'outFreq':self.outFreq,
-                'leds':self.leds}]
+                'leds':self.leds}
 
         jsonString = json.dumps(data)
         return jsonString
