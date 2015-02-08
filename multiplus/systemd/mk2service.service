@@ -2,7 +2,13 @@
 Description=MK2 Multiplus Monitoring Daemon
 
 [Service]
-ExecStart=/usr/bin/python /opt/inverter_monitor/multiplus/mk2Daemon.py
+ExecStart=/usr/bin/python /opt/inverter_monitor/multiplus/mk2Daemon.py --dev /dev/ttyUSB0
 Restart=always
+RestartSec=5
+User=mk2
+Group=mk2
 StandardOutput=syslog
 StandardError=syslog
+
+[Install]
+WantedBy=multi-user.target
