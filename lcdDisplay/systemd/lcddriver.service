@@ -6,5 +6,11 @@ Requires=mk2service.service
 [Service]
 ExecStart=/usr/bin/python /opt/inverter_monitor/lcdDisplay/lcdDriver.py
 Restart=always
+RestartSec=5
+User=mk2
+Group=mk2
 StandardOutput=syslog
 StandardError=syslog
+
+[Install]
+WantedBy=multi-user.target

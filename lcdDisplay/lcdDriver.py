@@ -76,45 +76,47 @@ def getMultiplusInfo():
         return ""
     device = json.loads(responseString)
 
-    leds = device[0]['leds']
+    leds = device['leds']
     lcdString = str(leds[0])
     lcdString += str(leds[3])
     lcdString += str(leds[7])
 
-    batVoltage = device[0]['batVoltage'] 
+    batVoltage = device['batVoltage'] 
 
     if leds[1] != 0 and leds[7] != 1 or batVoltage <= 12.33:
         lcdString += '3'
-    elif batVoltage < 13 and leds[7] == 1:
+    elif leds[5] == 1:
         lcdString += '5'
     elif leds[4] == 1:
         lcdString += '4'
     elif leds[7] == 0:
-        if batVoltage > 13:
+        if batVoltage > 12.5:
             lcdString += '0'
-        elif batVoltage > 12.66:   
+        elif batVoltage > 12.2:   
             lcdString += '1'
-        elif batVoltage > 12.33:   
+        elif batVoltage > 12.0:   
             lcdString += '2'
+    else:
+        lcdString += '4'
     
 
     lcdString += formatString(batVoltage, 5, 2)
-    batCurrent = device[0]['batCurrent'] 
+    batCurrent = device['batCurrent'] 
     lcdString += formatString(batCurrent, 6, 2)
 
-    inVoltage = device[0]['inVoltage'] 
+    inVoltage = device['inVoltage'] 
     lcdString += formatString(inVoltage, 5, 1)
-    inCurrent = device[0]['inCurrent'] 
+    inCurrent = device['inCurrent'] 
     lcdString += formatString(inCurrent, 4, 2)
     
-    outVoltage = device[0]['outVoltage'] 
+    outVoltage = device['outVoltage'] 
     lcdString += formatString(outVoltage, 5, 1)
-    outCurrent = device[0]['outCurrent'] 
+    outCurrent = device['outCurrent'] 
     lcdString += formatString(outCurrent, 4, 2)
 
-    inFreq = device[0]['inFreq'] 
+    inFreq = device['inFreq'] 
     lcdString += formatString(inFreq, 4, 1)
-    outFreq = device[0]['outFreq'] 
+    outFreq = device['outFreq'] 
     lcdString += formatString(inFreq, 4, 1)
     
     return lcdString
