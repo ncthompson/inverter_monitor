@@ -1,3 +1,9 @@
+# NOTICE
+
+This repository is deprecated as the functionality is pulled into [invertergui](https://github.com/hpdvanwyk/invertergui)
+
+# Info
+
 Inverter Monitor
 =================
 An MK2/USB monitor for the Victron Multiplus.
